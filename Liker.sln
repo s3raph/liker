@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.3.32825.248
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Liker", "Liker.csproj", "{73ED3796-A17A-473C-BD67-30250BA6E715}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Liker", "Liker\Liker.csproj", "{73ED3796-A17A-473C-BD67-30250BA6E715}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Liker.Tests", "..\Liker.Tests\Liker.Tests.csproj", "{B77BCE9D-02B0-4B82-9A08-26F2D7CDEADC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Liker.Tests", "Liker.Tests\Liker.Tests.csproj", "{B77BCE9D-02B0-4B82-9A08-26F2D7CDEADC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
