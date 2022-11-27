@@ -1,16 +1,25 @@
 ﻿using Liker.Instagram;
+using Liker.Persistence;
+using System.Text.RegularExpressions;
 
 namespace Liker.Logic
 {
-    internal class Process
+    public class Process
     {
         private readonly IInstagramService InstaService;
+        private readonly IDatabase Database;
+        private readonly IProcessOptions Options;
 
         private readonly PageOptions GetFollowersFirstPageOptions = new();
+        private readonly Regex HashTagRegex;
 
-        public Process(IInstagramService instaService)
+        public Process(IInstagramService instaService, IDatabase database, IProcessOptions options)
         {
             InstaService = instaService ?? throw new ArgumentNullException(nameof(instaService));
+            Database     = database     ?? throw new ArgumentNullException(nameof(database));
+            Options      = options      ?? throw new ArgumentNullException(nameof(options));
+
+            HashTagRegex = new Regex($@"\s#({string.Join('|', options.HashTagsToLike.Select(h => h.Substring(1)).ToArray())})", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         }
 
         /// <summary>
@@ -22,35 +31,114 @@ namespace Liker.Logic
         /// <returns></returns>
         public async Task Run(IEnumerable<string> accountsToProcess, CancellationToken token = default)
         {
-            // foreach account
-            foreach (var account in accountsToProcess)
+            int accountsVisited = 0;
+            int accountsLiked   = 0;
+            int postsLiked      = 0;
+
+            try
             {
-                // foreach follower page
-                Page<AccountFollower> currentPage = null;
-
-                do
+                // foreach account
+                foreach (var account in accountsToProcess)
                 {
-                    token.ThrowIfCancellationRequested();
+                    // foreach follower page
+                    Page<AccountFollower> currentPage = null;
 
-                    currentPage = await InstaService.GetUserFollowersAsync(account, currentPage?.NextPageOptions ?? GetFollowersFirstPageOptions);
-
-                    // foreach follower
-                    foreach (var follower in currentPage)
+                    do
                     {
                         token.ThrowIfCancellationRequested();
 
-                        // insert into database
-                        // if !private AND !blocked AND !seenBefore AND followers < 400
-                        //   retrieve first NUM (default 9) follower posts (and thumbnails)
-                        //   if can find posts with known hashtags
-                        //     Like random selection of <5 posts
-                        //   else
-                        //     find any photos that don't contain a face
-                        //     Like one random post
+                        currentPage = await InstaService.GetUserFollowersAsync(account, currentPage?.NextPageOptions ?? GetFollowersFirstPageOptions);
+
+                        // filter out followers if they exist in database
+                        var databaseFollowers = await Database.GetFollowersDictionary(currentPage.Select(f => f.UserID).ToArray());
+                        var filteredPage = currentPage.Where(f => !databaseFollowers.ContainsKey(f.UserID));
+
+                        accountsVisited += filteredPage.Count();
+
+                        // foreach follower
+                        foreach (var follower in filteredPage)
+                        {
+                            token.ThrowIfCancellationRequested();
+
+                            if (follower.IsRestricted || follower.IsPrivate)
+                            {
+                                // insert into database
+                                await Database.InsertFollower(follower);
+                            }
+                            else
+                            {
+                                await DelayByRandom(Options.DelaySeed);
+
+                                var userProfile = await InstaService.GetUserProfile(follower.Username, token);
+
+                                // insert into database
+                                follower.FollowerCount = userProfile.FollowerCount;
+                                await Database.InsertFollower(follower);
+
+                                // if !private AND !blocked AND !seenBefore AND followers < 400
+                                if (userProfile.FollowerCount < 400)
+                                {
+                                    // retrieve first NUM (default 12) follower posts (and thumbnails)
+                                    var posts = await InstaService.GetUserFeedAsync(follower.Username, new PageOptions(), token);
+
+                                    var postsNotAlreadyLiked = posts.Where(p => !p.HasLiked);
+
+                                    // if can find posts with known hashtags
+                                    var postsWithTags = posts.Where(p => DoesTextContainAnyHashTags(p.Caption?.Text));
+
+                                    if (postsWithTags.Any())
+                                    {
+                                        accountsLiked++;
+
+                                        // Like random selection of <5 posts
+                                        var randomPosts = postsWithTags.TakeRandom(5).ToList();
+
+                                        foreach (var post in randomPosts)
+                                        {
+                                            await DelayByRandom(Options.DelaySeed);
+                                            await InstaService.LikeAsync(post.Pk, token);
+                                            postsLiked++;
+                                        }
+
+                                        Console.WriteLine($"Liked {randomPosts.Count} of @{follower.Username}'s posts");
+                                    }
+                                    else
+                                    {
+                                        // find any photos that don't contain a face
+                                        // Like one random post
+
+                                        // todo: Not implemented yet
+                                    }
+                                }
+                            }
+                        }
+
+                        await DelayByRandom(Options.DelaySeed);
                     }
+                    while (currentPage.IsThereAnotherPage);
                 }
-                while (currentPage.IsThereAnotherPage);
+            }
+            finally
+            {
+                Console.WriteLine($"Visited            {accountsVisited} accounts");
+                Console.WriteLine($"Liked posts on     {accountsLiked} accounts");
+                Console.WriteLine($"Total posts liked: {postsLiked}");
             }
         }
+
+        public bool DoesTextContainAnyHashTags(string text) => string.IsNullOrEmpty(text) ? false : HashTagRegex.IsMatch(text);
+
+        private static Random Randy = new Random();
+
+        /// <summary>
+        /// Delays by a random interval that will be 50% higher or lower than the milliseconds provided before calling the
+        /// provided function
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="millisecondsSeed"></param>
+        /// <param name="toDebounce"></param>
+        /// <param name="token"></param>
+        /// <returns></returns>
+        private static Task DelayByRandom(int millisecondsSeed, CancellationToken token = default) => Task.Delay((millisecondsSeed / 2) + Randy.Next(millisecondsSeed), token);
     }
 }

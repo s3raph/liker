@@ -1,6 +1,7 @@
 ﻿using CommandLine;
 using Liker.Instagram;
 using Liker.Logic;
+using Liker.Persistence;
 using Ninject;
 using System.Diagnostics;
 
@@ -13,7 +14,7 @@ namespace Liker
         /// <summary>
         /// Docs on setting up options for CommandLineParser: https://github.com/commandlineparser/commandline
         /// </summary>
-        class CommandLineOptions : IInstagramOptions
+        class CommandLineOptions : IInstagramOptions, IProcessOptions
         {
             [Option('c', "csrf-token", Required = true, HelpText = "CSRF Bearer token to use on HTTP requests to Instagram.")]
             public string CSRFToken { get; set; } = string.Empty;
@@ -29,18 +30,27 @@ namespace Liker
 
             [Option('r', "runtime", Required = false, Default = 0, HelpText = "The limit placed on the total running time in minutes. If not specified tool will run to completion.")]
             public int RuntimeLimit { get; set; } = 0;
+
+            [Option('h', "hash-tags", Required = false, HelpText = "Hashtags to look for when choosing photos to like.")]
+            public IEnumerable<string> HashTagsToLike { get; set; } = Enumerable.Empty<string>();
         }
 
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
-            Parser.Default.ParseArguments<CommandLineOptions>(args)
-                   .WithParsed(async o =>
+            await Parser.Default.ParseArguments<CommandLineOptions>(args)
+                   .WithParsedAsync(async o =>
                    {
-                       if (!string.IsNullOrEmpty(o.CSRFToken)) throw new InvalidOperationException($"{nameof(o.CSRFToken)} is null or empty");
+                       if (string.IsNullOrEmpty(o.CSRFToken)) throw new InvalidOperationException($"{nameof(o.CSRFToken)} is null or empty");
+                       if (string.IsNullOrEmpty(o.SessionID)) throw new InvalidOperationException($"{nameof(o.SessionID)} is null or empty");
+
+                       if (!o.HashTagsToLike.Any())
+                       {
+                           o.HashTagsToLike = new[] { "#warhammer40000", "#warhammer40k", "#warhammer", "#warhammercommunity", "#paintingwarhammer", "#wh40k", "#miniature", "#miniatures", "#miniaturepainting", "#painter", "#painting", "#paintingminiatures" };
+                       }
 
                        // Initialize process
                        var services = SetupServiceBindings(o);
-                       var process  = services.Get<Logic.Process>();
+                       var process = services.Get<Logic.Process>();
 
                        // Run process
                        try
@@ -59,22 +69,32 @@ namespace Liker
                        {
                            Console.WriteLine("Liking run terminated");
                        }
-                   })
-                   .WithNotParsed(errors =>
-                   {
-                       Console.WriteLine(errors);
-                       Environment.Exit(-1);
+                       catch (Exception ex)
+                       {
+                           Console.Write($"Unhandled {ex.GetType()} {ex.Message}\n\n{ex.StackTrace}");
+                           Environment.Exit(-1);
+                       }
                    });
+                   //.WithNotParsed(errors =>
+                   //{
+                   //    Console.WriteLine(errors);
+                   //    Environment.Exit(-1);
+                   //});
         }
 
         private static IKernel SetupServiceBindings(CommandLineOptions commandLineOptions)
         {
             var kernel = new StandardKernel();
 
+            kernel.Bind<IInstagramOptions, IProcessOptions>().ToConstant(commandLineOptions);
+
             kernel.Bind<Logic.Process>().ToSelf();
 
             // Initialize database
+            kernel.Bind<IDatabase>().To<Database>();
+
             // Initialize Instagram service
+            kernel.Bind<IInstagramService>().To<InstagramService>();
 
             return kernel;
         }

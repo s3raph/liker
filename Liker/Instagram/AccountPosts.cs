@@ -15,6 +15,57 @@ namespace Liker.Instagram
         public string Url { get; set; }
     }
 
+    public class Caption
+    {
+        [JsonPropertyName("pk")]
+        public string Pk { get; set; }
+
+        [JsonPropertyName("user_id")]
+        public string UserId { get; set; }
+
+        [JsonPropertyName("text")]
+        public string Text { get; set; }
+
+        [JsonPropertyName("type")]
+        public int Type { get; set; }
+
+        [JsonPropertyName("created_at")]
+        public int CreatedAt { get; set; }
+
+        [JsonPropertyName("created_at_utc")]
+        public int CreatedAtUtc { get; set; }
+
+        [JsonPropertyName("content_type")]
+        public string ContentType { get; set; }
+
+        [JsonPropertyName("status")]
+        public string Status { get; set; }
+
+        [JsonPropertyName("bit_flags")]
+        public int BitFlags { get; set; }
+
+        [JsonPropertyName("did_report_as_spam")]
+        public bool DidReportAsSpam { get; set; }
+
+        [JsonPropertyName("share_enabled")]
+        public bool ShareEnabled { get; set; }
+
+        [JsonPropertyName("user")]
+        public User User { get; set; }
+
+        [JsonPropertyName("is_covered")]
+        public bool IsCovered { get; set; }
+
+        [JsonPropertyName("is_ranked_comment")]
+        public bool IsRankedComment { get; set; }
+
+        [JsonPropertyName("media_id")]
+        public string MediaId { get; set; }
+
+        [JsonPropertyName("private_reply_status")]
+        public int PrivateReplyStatus { get; set; }
+    }
+
     public class CarouselMedium
     {
         [JsonPropertyName("id")]
@@ -306,7 +357,7 @@ namespace Liker.Instagram
         public MashupInfo MashupInfo { get; set; }
 
         [JsonPropertyName("caption")]
-        public object Caption { get; set; }
+        public Caption Caption { get; set; }
 
         [JsonPropertyName("comment_inform_treatment")]
         public CommentInformTreatment CommentInformTreatment { get; set; }
