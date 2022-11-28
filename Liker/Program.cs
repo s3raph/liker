@@ -9,7 +9,7 @@ namespace Liker
 {
     internal class Program
     {
-        private const int DEFAULT_DELAY_SEED_MILLISECONDS = 2000;
+        private const int DEFAULT_DELAY_SEED_MILLISECONDS = 1500;
 
         /// <summary>
         /// Docs on setting up options for CommandLineParser: https://github.com/commandlineparser/commandline
@@ -33,53 +33,57 @@ namespace Liker
 
             [Option('h', "hash-tags", Required = false, HelpText = "Hashtags to look for when choosing photos to like.")]
             public IEnumerable<string> HashTagsToLike { get; set; } = Enumerable.Empty<string>();
+
+            /// <inheritdoc/>
+            public int MaxAllowedUserProfileInfoCalls => 400;
         }
 
         static async Task Main(string[] args)
         {
             await Parser.Default.ParseArguments<CommandLineOptions>(args)
-                   .WithParsedAsync(async o =>
+                   .WithParsedAsync(async options =>
                    {
-                       if (string.IsNullOrEmpty(o.CSRFToken)) throw new InvalidOperationException($"{nameof(o.CSRFToken)} is null or empty");
-                       if (string.IsNullOrEmpty(o.SessionID)) throw new InvalidOperationException($"{nameof(o.SessionID)} is null or empty");
+                       if (string.IsNullOrEmpty(options.CSRFToken)) throw new InvalidOperationException($"{nameof(options.CSRFToken)} is null or empty");
+                       if (string.IsNullOrEmpty(options.SessionID)) throw new InvalidOperationException($"{nameof(options.SessionID)} is null or empty");
 
-                       if (!o.HashTagsToLike.Any())
+                       if (!options.HashTagsToLike.Any())
                        {
-                           o.HashTagsToLike = new[] { "#warhammer40000", "#warhammer40k", "#warhammer", "#warhammercommunity", "#paintingwarhammer", "#wh40k", "#miniature", "#miniatures", "#miniaturepainting", "#painter", "#painting", "#paintingminiatures" };
+                           options.HashTagsToLike = new[] { "#ageofsigmar","#warhammer40000", "#warhammer40k", "#warhammer", "#warhammercommunity", "#paintingwarhammer", "#wh40k", "#miniature", "#miniatures", "#miniaturepainting", "#painter", "#painting", "#paintingminiatures" };
                        }
 
                        // Initialize process
-                       var services = SetupServiceBindings(o);
-                       var process = services.Get<Logic.Process>();
+                       var services = SetupServiceBindings(options);
+                       var process  = services.Get<Logic.Process>();
+
+                       var runTime = Stopwatch.StartNew();
 
                        // Run process
                        try
                        {
-                           if (o.RuntimeLimit > 0)
+                           if (options.RuntimeLimit > 0)
                            {
-                               var tokenSource = new CancellationTokenSource(new TimeSpan(0, o.RuntimeLimit, 0));
-                               await process.Run(o.Accounts, tokenSource.Token);
+                               Console.WriteLine($"Launching run - runtime limit is {options.RuntimeLimit} minutes");
+                               var tokenSource = new CancellationTokenSource(new TimeSpan(0, options.RuntimeLimit, 0));
+                               await process.Run(options.Accounts, tokenSource.Token);
                            }
                            else
                            {
-                               await process.Run(o.Accounts);
+                               Console.WriteLine("Launching run - no runtime limit specified");
+                               await process.Run(options.Accounts);
                            }
                        }
                        catch (OperationCanceledException)
                        {
-                           Console.WriteLine("Liking run terminated");
+                           runTime.Stop();
+                           Console.WriteLine($"Liking limit hit - ran for {runTime.Elapsed}");
                        }
                        catch (Exception ex)
                        {
-                           Console.Write($"Unhandled {ex.GetType()} {ex.Message}\n\n{ex.StackTrace}");
+                           runTime.Stop();
+                           Console.Write($"Unhandled {ex.GetType()} {ex.Message}\n\n{ex.StackTrace}\n\nRan for {runTime.Elapsed}");
                            Environment.Exit(-1);
                        }
                    });
-                   //.WithNotParsed(errors =>
-                   //{
-                   //    Console.WriteLine(errors);
-                   //    Environment.Exit(-1);
-                   //});
         }
 
         private static IKernel SetupServiceBindings(CommandLineOptions commandLineOptions)

@@ -9,8 +9,6 @@ namespace Liker.Logic
         private readonly IInstagramService InstaService;
         private readonly IDatabase Database;
         private readonly IProcessOptions Options;
-
-        private readonly PageOptions GetFollowersFirstPageOptions = new();
         private readonly Regex HashTagRegex;
 
         public Process(IInstagramService instaService, IDatabase database, IProcessOptions options)
@@ -31,6 +29,8 @@ namespace Liker.Logic
         /// <returns></returns>
         public async Task Run(IEnumerable<string> accountsToProcess, CancellationToken token = default)
         {
+            Console.WriteLine($"Starting run for accounts {string.Join(", ", accountsToProcess.Select(a => $"@{a}"))}");
+
             int accountsVisited = 0;
             int accountsLiked   = 0;
             int postsLiked      = 0;
@@ -40,9 +40,25 @@ namespace Liker.Logic
                 // foreach account
                 foreach (var account in accountsToProcess)
                 {
-                    // foreach follower page
-                    Page<AccountFollower> currentPage = null;
+                    // Pick up our place from where we were up to last time
+                    var storedAccountInfo = await Database.GetAccountAsync(account);
 
+                    Page<AccountFollower> currentPage = null;
+                    PageOptions GetFollowersFirstPageOptions;
+
+                    if (storedAccountInfo != default)
+                    {
+                        GetFollowersFirstPageOptions = new PageOptions
+                        {
+                            MaxID = storedAccountInfo.NextMaxId
+                        };
+                    }
+                    else
+                    {
+                        GetFollowersFirstPageOptions = new();
+                    }
+
+                    // foreach follower page
                     do
                     {
                         token.ThrowIfCancellationRequested();
@@ -50,7 +66,7 @@ namespace Liker.Logic
                         currentPage = await InstaService.GetUserFollowersAsync(account, currentPage?.NextPageOptions ?? GetFollowersFirstPageOptions);
 
                         // filter out followers if they exist in database
-                        var databaseFollowers = await Database.GetFollowersDictionary(currentPage.Select(f => f.UserID).ToArray());
+                        var databaseFollowers = await Database.GetFollowersDictionaryAsync(currentPage.Select(f => f.UserID).ToArray());
                         var filteredPage = currentPage.Where(f => !databaseFollowers.ContainsKey(f.UserID));
 
                         accountsVisited += filteredPage.Count();
@@ -63,7 +79,7 @@ namespace Liker.Logic
                             if (follower.IsRestricted || follower.IsPrivate)
                             {
                                 // insert into database
-                                await Database.InsertFollower(follower);
+                                await Database.InsertFollowerAsync(follower);
                             }
                             else
                             {
@@ -73,7 +89,7 @@ namespace Liker.Logic
 
                                 // insert into database
                                 follower.FollowerCount = userProfile.FollowerCount;
-                                await Database.InsertFollower(follower);
+                                await Database.InsertFollowerAsync(follower);
 
                                 // if !private AND !blocked AND !seenBefore AND followers < 400
                                 if (userProfile.FollowerCount < 400)
@@ -113,10 +129,20 @@ namespace Liker.Logic
                             }
                         }
 
-                        await DelayByRandom(Options.DelaySeed);
+                        if (currentPage.IsThereAnotherPage)
+                        {
+                            await Database.SetAccountNextMaxIdAsync(account, currentPage.NextPageOptions.MaxID);
+                            await DelayByRandom(Options.DelaySeed);
+                        }
                     }
                     while (currentPage.IsThereAnotherPage);
+
+                    await Database.DeleteAccountAsync(account);
                 }
+            }
+            catch(InstagramLimitsExceededException ex)
+            {
+                Console.WriteLine("Hit limit of allowed Instagram calls - message reads: " + ex.Message);
             }
             finally
             {

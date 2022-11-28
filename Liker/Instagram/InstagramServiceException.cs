@@ -5,32 +5,32 @@ using System.Runtime.Serialization;
 namespace Liker.Instagram
 {
     [Serializable]
-    internal class InstagramServiceException : Exception
+    internal class InstagramRESTException : Exception
     {
         public HttpStatusCode StatusCode { get; }
         public RestRequest? Request      { get; }
         public RestResponse? Response    { get; }
 
-        public InstagramServiceException()
+        public InstagramRESTException()
         {
         }
 
-        public InstagramServiceException(string message) : base(message)
+        public InstagramRESTException(string message) : base(message)
         {
         }
 
-        public InstagramServiceException(string message, Exception? innerException) : base(message, innerException)
+        public InstagramRESTException(string message, Exception? innerException) : base(message, innerException)
         {
         }
 
-        public InstagramServiceException(string message, HttpStatusCode statusCode, RestRequest request, RestResponse response) : this(message)
+        public InstagramRESTException(string message, HttpStatusCode statusCode, RestRequest request, RestResponse response) : this(message)
         {
             StatusCode = statusCode;
             Request    = request;
             Response   = response;
         }
 
-        protected InstagramServiceException(SerializationInfo info, StreamingContext context) : base(info, context)
+        protected InstagramRESTException(SerializationInfo info, StreamingContext context) : base(info, context)
         {
         }
     }

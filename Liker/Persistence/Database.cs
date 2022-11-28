@@ -21,7 +21,7 @@ namespace Liker.Persistence
             ConnectionString = "Data Source=Liker.db";
         }
 
-        public async Task InsertFollower(AccountFollower toInsert)
+        public async Task InsertFollowerAsync(AccountFollower toInsert)
         {
             var connection = await GetConnection();
             await EnsureDatabaseInitialized(connection);
@@ -39,12 +39,45 @@ namespace Liker.Persistence
                 });
         }
 
-        public async Task<IReadOnlyCollection<AccountFollower>> GetFollowers(params string[] followerPks)
+        public async Task<IReadOnlyCollection<AccountFollower>> GetFollowersAsync(params string[] followerPks)
         {
             var connection = await GetConnection();
             await EnsureDatabaseInitialized(connection);
 
             return (await Connection.QueryAsync<AccountFollower>($"SELECT * FROM AccountFollower WHERE UserID in ({string.Join(',', followerPks)})")).ToList();
+        }
+
+        public async Task<Account> GetAccountAsync(string accountUserName)
+        {
+            var connection = await GetConnection();
+            await EnsureDatabaseInitialized(connection);
+
+            return await Connection.QueryFirstOrDefaultAsync<Account>($"SELECT * FROM Account WHERE Username = @userName LIMIT 1", new { userName = accountUserName });
+        }
+
+        public async Task SetAccountNextMaxIdAsync(string accountUserName, string nextMaxId)
+        {
+            var connection = await GetConnection();
+            await EnsureDatabaseInitialized(connection);
+
+            await connection.ExecuteAsync(
+                @"
+                INSERT INTO Account(Username, NextMaxId) VALUES(@userName, @nextMaxId)
+                  ON CONFLICT(Username) DO UPDATE SET NextMaxId = @nextMaxId
+                ",
+                new
+                {
+                    userName  = accountUserName,
+                    nextMaxId = nextMaxId
+                });
+        }
+
+        public async Task DeleteAccountAsync(string accountUserName)
+        {
+            var connection = await GetConnection();
+            await EnsureDatabaseInitialized(connection);
+
+            await connection.ExecuteAsync("DELETE FROM Account WHERE Username = @userName", new { userName = accountUserName });
         }
 
         private async Task<SqliteConnection> GetConnection()
@@ -60,7 +93,6 @@ namespace Liker.Persistence
 
         private async Task EnsureDatabaseInitialized(SqliteConnection connection)
         {
-
             if (!_databaseInitialized)
             {
                 if (!(await Connection.QueryAsync("SELECT name FROM sqlite_master WHERE type='table' AND name='AccountFollower'")).Any())
@@ -76,6 +108,21 @@ namespace Liker.Persistence
                             IsPrivate     bit          NOT NULL,
                             IsRestricted  bit          NOT NULL,
                             FollowerCount INTEGER      NULLABLE
+                        );
+                        ";
+
+                    await command.ExecuteNonQueryAsync();
+                }
+
+                if (!(await Connection.QueryAsync("SELECT name FROM sqlite_master WHERE type='table' AND name='Account'")).Any())
+                {
+                    var command = connection.CreateCommand();
+
+                    command.CommandText =
+                        @"
+                        CREATE TABLE Account (
+                            Username  nvarchar(50) NOT NULL PRIMARY KEY,
+                            NextMaxId nvarchar(50)
                         );
                         ";
 

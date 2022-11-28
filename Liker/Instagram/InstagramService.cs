@@ -27,7 +27,8 @@ namespace Liker.Instagram
                 headers.Add("sec-ch-ua-platform", "\"Windows\"");
             });
 
-        private bool _disposed = false;
+        private bool _disposed            = false;
+        private int _userProfileCallsMade = 0;
 
         public InstagramService(IInstagramOptions options)
         {
@@ -62,7 +63,7 @@ namespace Liker.Instagram
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new InstagramServiceException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response.StatusCode, request, response);
+                throw new InstagramRESTException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response.StatusCode, request, response);
             }
 
             var jsonObj = JsonNode.Parse(response.Content).AsObject();
@@ -111,6 +112,12 @@ namespace Liker.Instagram
 
         public async Task<UserProfile> GetUserProfile(string userName, CancellationToken cancellationToken)
         {
+            if (++_userProfileCallsMade > Options.MaxAllowedUserProfileInfoCalls)
+            {
+                throw new InstagramLimitsExceededException($"Max allowed calls to /api/v1/users/web_profile_info/ exceeded - threshold set at {Options.MaxAllowedUserProfileInfoCalls}");
+            }
+
+            // Got 429 too many requests response on this after a couple of hours - I suspect the rough volume is >500 requests
             try
             {
                 var request  = new RestRequest($"/api/v1/users/web_profile_info/?username={userName}", Method.Get);
@@ -118,7 +125,7 @@ namespace Liker.Instagram
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    throw new InstagramServiceException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response.StatusCode, request, response);
+                    throw new InstagramRESTException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response.StatusCode, request, response);
                 }
                 else
                 {
@@ -138,7 +145,7 @@ namespace Liker.Instagram
                 throw;
             }
 
-            throw new InstagramServiceException($"Failed to {nameof(GetUserProfile)}");
+            throw new InstagramRESTException($"Failed to {nameof(GetUserProfile)}");
         }
 
         private async Task<IReadOnlyDictionary<string, ExtendedFollowerInfo>> GetFriendShipStatuses(string[] userIds, CancellationToken cancellationToken)
@@ -150,7 +157,7 @@ namespace Liker.Instagram
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new InstagramServiceException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response.StatusCode, request, response);
+                throw new InstagramRESTException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response.StatusCode, request, response);
             }
             else
             {
@@ -162,7 +169,7 @@ namespace Liker.Instagram
                 }
             }
 
-            throw new InstagramServiceException($"Failed to {nameof(GetFriendShipStatuses)}");
+            throw new InstagramRESTException($"Failed to {nameof(GetFriendShipStatuses)}");
         }
 
         public async Task<Page<Post>> GetUserFeedAsync(string userHandle, PageOptions pageOptions, CancellationToken cancellationToken = default)
@@ -173,7 +180,7 @@ namespace Liker.Instagram
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new InstagramServiceException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response.StatusCode, request, response);
+                throw new InstagramRESTException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response.StatusCode, request, response);
             }
             else
             {
@@ -199,7 +206,7 @@ namespace Liker.Instagram
                 }
             }
 
-            throw new InstagramServiceException($"Failed to {nameof(GetUserFeedAsync)}");
+            throw new InstagramRESTException($"Failed to {nameof(GetUserFeedAsync)}");
         }
 
         public async Task LikeAsync(string postId, CancellationToken cancellationToken = default)
@@ -210,7 +217,7 @@ namespace Liker.Instagram
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new InstagramServiceException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response.StatusCode, request, response);
+                throw new InstagramRESTException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response.StatusCode, request, response);
             }
         }
     }

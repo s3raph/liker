@@ -2,7 +2,7 @@
   "profiles": {
     "Liker": {
       "commandName": "Project",
-      "commandLineArgs": "-a infernalbrush warhammercommunity\r\n-c cZPpvR2cfqISZ45eGsZ4lkbssMKHkL3H\r\n-s 49613149133%3AU2rbWOt8iu9LwW%3A7%3AAYdPQi6Id8ZD7htnJQS74Pboz7zFxfF8PCrti4xddw"
+      "commandLineArgs": "-a infernalbrush warhammercommunity\r\n-r 30\r\n-c cZPpvR2cfqISZ45eGsZ4lkbssMKHkL3H\r\n-s 49613149133%3AU2rbWOt8iu9LwW%3A7%3AAYdPQi6Id8ZD7htnJQS74Pboz7zFxfF8PCrti4xddw"
     }
   }
 }
