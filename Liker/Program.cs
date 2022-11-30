@@ -38,9 +38,8 @@ namespace Liker
             public int MaxAllowedUserProfileInfoCalls => 400;
         }
 
-        static async Task Main(string[] args)
-        {
-            await Parser.Default.ParseArguments<CommandLineOptions>(args)
+        static Task Main(string[] args) =>
+            Parser.Default.ParseArguments<CommandLineOptions>(args)
                    .WithParsedAsync(async options =>
                    {
                        if (string.IsNullOrEmpty(options.CSRFToken)) throw new InvalidOperationException($"{nameof(options.CSRFToken)} is null or empty");
@@ -48,7 +47,7 @@ namespace Liker
 
                        if (!options.HashTagsToLike.Any())
                        {
-                           options.HashTagsToLike = new[] { "#ageofsigmar","#warhammer40000", "#warhammer40k", "#warhammer", "#warhammercommunity", "#paintingwarhammer", "#wh40k", "#miniature", "#miniatures", "#miniaturepainting", "#painter", "#painting", "#paintingminiatures" };
+                           options.HashTagsToLike = new[] { "#ageofsigmar", "#aos","#warhammer40000", "#warhammer40k", "#warhammer", "#warhammercommunity", "#paintingwarhammer", "#wh40k", "#miniature", "#miniatures", "#miniaturepainting", "#painter", "#painting", "#paintingminiatures" };
                        }
 
                        // Initialize process
@@ -62,7 +61,7 @@ namespace Liker
                        {
                            if (options.RuntimeLimit > 0)
                            {
-                               Console.WriteLine($"Launching run - runtime limit is {options.RuntimeLimit} minutes");
+                               Console.WriteLine($"Launching run at {DateTime.Now} - runtime limit is {options.RuntimeLimit} minutes");
                                var tokenSource = new CancellationTokenSource(new TimeSpan(0, options.RuntimeLimit, 0));
                                await process.Run(options.Accounts, tokenSource.Token);
                            }
@@ -84,7 +83,6 @@ namespace Liker
                            Environment.Exit(-1);
                        }
                    });
-        }
 
         private static IKernel SetupServiceBindings(CommandLineOptions commandLineOptions)
         {

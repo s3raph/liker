@@ -19,12 +19,26 @@ namespace Liker.Instagram
             },
             headers =>
             {
+                // Client
+                headers.Add("Accept"            , "*/*");
+                headers.Add("Accept-Language"   , "en-GB,en;q=0.9,en-US;q=0.8");
+                headers.Add("X-Requested-With"  , "XMLHttpRequest");
+
+                // Miscellaneous
+                headers.Add("X-ASBD-ID"         , "198387");
                 headers.Add("X-IG-App-ID"       , INSTAGRAM_APP_ID);
                 headers.Add("X-IG-WWW-Claim"    , "hmac.AR07ZHlDUQP57dosHalfT1Oltkiyzk0vatBe02Rpyo_KoekC");
-                headers.Add("X-Requested-With"  , "XMLHttpRequest");
-                headers.Add("Origin"            , "https://www.instagram.com");
-                headers.Add("Accept"            , "*/*");
-                headers.Add("sec-ch-ua-platform", "\"Windows\"");
+                headers.Add("X-Instagram-AJAX"  , "1006554634");
+
+                // Security
+                headers.Add("Origin"                     , "https://www.instagram.com");
+                headers.Add("sec-ch-prefers-color-scheme", "light");
+                headers.Add("sec-ch-ua"                  , "\"Microsoft Edge\";v=\"107\", \"Chromium\";v=\"107\", \"Not=A?Brand\";v=\"24\"");
+                headers.Add("sec-ch-ua-mobile"           , "?0");
+                headers.Add("sec-ch-ua-platform"         , "\"Windows\"");
+                headers.Add("Sec-Fetch-Dest"             , "empty");
+                headers.Add("Sec-Fetch-Mode"             , "cors");
+                headers.Add("Sec-Fetch-Site"             , "same-origin");
             });
 
         private bool _disposed            = false;
@@ -35,7 +49,7 @@ namespace Liker.Instagram
             Options = options ?? throw new ArgumentNullException(nameof(options));
 
             Client.AddDefaultHeader("X-CSRFToken", Options.CSRFToken);
-            Client.AddDefaultHeader("Cookie", $"csrftoken={Options.CSRFToken}; ds_user_id=49613149133; ig_did=76680F9A-B7C2-4DDF-BA26-5FACFBD75E89; ig_nrcb=1; mid=Y4GsCwALAAHC7gDdoAPxY_-bYwUD; rur=\"EAG\\05449613149133\\0541700979139:01f7c760001a2ae61af13ccac4e74b0b03f3a8ef0e1440bbc076611233629ced05719217\"; sessionid={Options.SessionID}; shbid=\"17549\\05449613149133\\0541700978997:01f73fcdff4e7884de6dd9710cfe8e25a3982f4b8bbe2d24c06296d6b40626cbb51ea4a2\"; shbts=\"1669442997\\05449613149133\\0541700978997:01f78ff68ec110707bc1856c55cdaf72c930deb1b3a634c8ca3e55cbc1ced0c83b658fc8\"");
+            Client.AddDefaultHeader("Cookie"     , $"csrftoken={Options.CSRFToken}; ds_user_id=49613149133; ig_did=76680F9A-B7C2-4DDF-BA26-5FACFBD75E89; ig_nrcb=1; mid=Y4GsCwALAAHC7gDdoAPxY_-bYwUD; rur=\"EAG\\05449613149133\\0541700979139:01f7c760001a2ae61af13ccac4e74b0b03f3a8ef0e1440bbc076611233629ced05719217\"; sessionid={Options.SessionID}; shbid=\"17549\\05449613149133\\0541700978997:01f73fcdff4e7884de6dd9710cfe8e25a3982f4b8bbe2d24c06296d6b40626cbb51ea4a2\"; shbts=\"1669442997\\05449613149133\\0541700978997:01f78ff68ec110707bc1856c55cdaf72c930deb1b3a634c8ca3e55cbc1ced0c83b658fc8\"");
         }
 
         public void Dispose()
@@ -59,7 +73,9 @@ namespace Liker.Instagram
 
             var request = new RestRequest($"/api/v1/friendships/{userId}/followers/?{pageOptions.AsQueryString()}&search_surface=follow_list_page", Method.Get);
 
-            var response = await Client.ExecuteAsync(request, cancellationToken);
+            var response = await Client.ExecuteAsync(request);
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (!response.IsSuccessStatusCode)
             {
@@ -121,7 +137,9 @@ namespace Liker.Instagram
             try
             {
                 var request  = new RestRequest($"/api/v1/users/web_profile_info/?username={userName}", Method.Get);
-                var response = await Client.ExecuteAsync(request, cancellationToken);
+                var response = await Client.ExecuteAsync(request);
+
+                cancellationToken.ThrowIfCancellationRequested();
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -133,9 +151,12 @@ namespace Liker.Instagram
 
                     return new UserProfile
                     {
-                        UserName      = userName,
-                        UserId        = jsonObj["data"]["user"]["id"].GetValue<string>(),
-                        FollowerCount = jsonObj["data"]["user"]["edge_followed_by"]["count"].GetValue<int>()
+                        UserName         = userName,
+                        UserId           = jsonObj["data"]["user"]["id"].GetValue<string>(),
+                        FollowedByViewer = jsonObj["data"]["user"]["followed_by_viewer"].GetValue<bool>(),
+                        FollowsViewer    = jsonObj["data"]["user"]["follows_viewer"].GetValue<bool>(),
+                        HasBlockedViewer = jsonObj["data"]["user"]["has_blocked_viewer"].GetValue<bool>(),
+                        FollowerCount    = jsonObj["data"]["user"]["edge_followed_by"]["count"].GetValue<int>()
                     };
                 }
             }
@@ -153,7 +174,9 @@ namespace Liker.Instagram
             var request = new RestRequest("/api/v1/friendships/show_many/", Method.Post);
             request.AddHeader("Content-Type", "application/x-www-form-urlencoded");
             request.AddBody($"user_ids={string.Join("%2C", userIds)}");
-            var response = await Client.ExecuteAsync(request, cancellationToken);
+            var response = await Client.ExecuteAsync(request);
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (!response.IsSuccessStatusCode)
             {
@@ -176,7 +199,9 @@ namespace Liker.Instagram
         {
             var request = new RestRequest($"/api/v1/feed/user/{userHandle}/username/?{pageOptions.AsQueryString()}", Method.Get);
 
-            var response = await Client.ExecuteAsync(request, cancellationToken);
+            var response = await Client.ExecuteAsync(request);
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (!response.IsSuccessStatusCode)
             {
@@ -213,7 +238,9 @@ namespace Liker.Instagram
         {
             var request = new RestRequest($"/api/v1/web/likes/{postId}/like/", Method.Post);
 
-            var response = await Client.ExecuteAsync(request, cancellationToken);
+            var response = await Client.ExecuteAsync(request);
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (!response.IsSuccessStatusCode)
             {

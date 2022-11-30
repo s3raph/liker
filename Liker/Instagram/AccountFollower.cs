@@ -13,5 +13,7 @@
         public bool IsRestricted  { get; init; }
 
         public int? FollowerCount { get; set; } = null;
+
+        public int? PostsLiked    { get; set; } = null;
     }
 }

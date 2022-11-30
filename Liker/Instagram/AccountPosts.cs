@@ -236,8 +236,8 @@ namespace Liker.Instagram
         [JsonPropertyName("id")]
         public string Id { get; set; }
 
-        [JsonPropertyName("device_timestamp")]
-        public long DeviceTimestamp { get; set; }
+        //[JsonPropertyName("device_timestamp")]
+        //public long DeviceTimestamp { get; set; }
 
         [JsonPropertyName("media_type")]
         public int MediaType { get; set; }

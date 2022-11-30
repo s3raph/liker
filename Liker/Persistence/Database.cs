@@ -27,7 +27,7 @@ namespace Liker.Persistence
             await EnsureDatabaseInitialized(connection);
 
             await connection.ExecuteAsync(
-                "INSERT INTO AccountFollower VALUES (@userId, @userName, @following, @isPrivate, @isRestricted, @followerCount);",
+                "INSERT INTO AccountFollower VALUES (@userId, @userName, @following, @isPrivate, @isRestricted, @followerCount, @postsLiked, date());",
                 new
                 {
                     userId        = toInsert.UserID,
@@ -35,7 +35,8 @@ namespace Liker.Persistence
                     following     = toInsert.Following,
                     isPrivate     = toInsert.IsPrivate,
                     isRestricted  = toInsert.IsRestricted,
-                    followerCount = toInsert.FollowerCount
+                    followerCount = toInsert.FollowerCount,
+                    postsLiked    = toInsert.PostsLiked
                 });
         }
 
@@ -103,11 +104,13 @@ namespace Liker.Persistence
                         @"
                         CREATE TABLE AccountFollower (
                             UserID        INTEGER      NOT NULL PRIMARY KEY,
-                            Username      nvarchar(50) NOT NULL,
+                            Username      TEXT         NOT NULL,
                             Following     bit          NOT NULL,
                             IsPrivate     bit          NOT NULL,
                             IsRestricted  bit          NOT NULL,
-                            FollowerCount INTEGER      NULLABLE
+                            FollowerCount INTEGER      NULLABLE,
+                            PostsLiked    INTEGER      NULLABLE,
+                            LastSeen      TEXT         NOT NULL
                         );
                         ";
 
@@ -121,8 +124,8 @@ namespace Liker.Persistence
                     command.CommandText =
                         @"
                         CREATE TABLE Account (
-                            Username  nvarchar(50) NOT NULL PRIMARY KEY,
-                            NextMaxId nvarchar(50)
+                            Username  TEXT NOT NULL PRIMARY KEY,
+                            NextMaxId TEXT
                         );
                         ";
 

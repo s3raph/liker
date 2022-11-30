@@ -89,18 +89,14 @@ namespace Liker.Logic
 
                                 // insert into database
                                 follower.FollowerCount = userProfile.FollowerCount;
-                                await Database.InsertFollowerAsync(follower);
 
                                 // if !private AND !blocked AND !seenBefore AND followers < 400
-                                if (userProfile.FollowerCount < 400)
+                                if (userProfile.FollowerCount < 400 &&
+                                    !userProfile.HasBlockedViewer   &&
+                                    !userProfile.FollowedByViewer   &&
+                                    !userProfile.FollowsViewer)
                                 {
-                                    // retrieve first NUM (default 12) follower posts (and thumbnails)
-                                    var posts = await InstaService.GetUserFeedAsync(follower.Username, new PageOptions(), token);
-
-                                    var postsNotAlreadyLiked = posts.Where(p => !p.HasLiked);
-
-                                    // if can find posts with known hashtags
-                                    var postsWithTags = posts.Where(p => DoesTextContainAnyHashTags(p.Caption?.Text));
+                                    IEnumerable<Post> postsWithTags = await GetPostsForLiking(follower.Username, token);
 
                                     if (postsWithTags.Any())
                                     {
@@ -109,10 +105,13 @@ namespace Liker.Logic
                                         // Like random selection of <5 posts
                                         var randomPosts = postsWithTags.TakeRandom(5).ToList();
 
+                                        follower.PostsLiked = 0;
+
                                         foreach (var post in randomPosts)
                                         {
                                             await DelayByRandom(Options.DelaySeed);
                                             await InstaService.LikeAsync(post.Pk, token);
+                                            follower.PostsLiked++;
                                             postsLiked++;
                                         }
 
@@ -126,6 +125,8 @@ namespace Liker.Logic
                                         // todo: Not implemented yet
                                     }
                                 }
+
+                                await Database.InsertFollowerAsync(follower);
                             }
                         }
 
@@ -150,6 +151,37 @@ namespace Liker.Logic
                 Console.WriteLine($"Liked posts on     {accountsLiked} accounts");
                 Console.WriteLine($"Total posts liked: {postsLiked}");
             }
+        }
+
+        private async Task<IEnumerable<Post>> GetPostsForLiking(string userName, CancellationToken token)
+        {
+            var option = new PageOptions();
+            var pagesRetrieved = 0;
+
+            while (pagesRetrieved++ < 2)
+            {
+                // retrieve first NUM (default 12) follower posts (and thumbnails)
+                var postsPage = await InstaService.GetUserFeedAsync(userName, option, token);
+
+                // if can find posts with known hashtags
+                var posts = postsPage.Where(p => !p.HasLiked && DoesTextContainAnyHashTags(p.Caption?.Text));
+
+                if (posts.Any())
+                {
+                    return posts;
+                }
+                else if (postsPage.IsThereAnotherPage)
+                {
+                    option = postsPage.NextPageOptions;
+                    await DelayByRandom(Options.DelaySeed);
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            return Enumerable.Empty<Post>();
         }
 
         public bool DoesTextContainAnyHashTags(string text) => string.IsNullOrEmpty(text) ? false : HashTagRegex.IsMatch(text);
