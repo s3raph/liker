@@ -2,7 +2,14 @@
 {
     public interface IInstagramOptions
     {
+        /// <summary>
+        /// Value for the x-csrftoken header and csrftoken cookie
+        /// </summary>
         string CSRFToken                   { get; set; }
+
+        /// <summary>
+        /// Value for the sessionid cookie
+        /// </summary>
         string SessionID                   { get; set; }
 
         /// <summary>
@@ -12,5 +19,15 @@
         /// this threshold has been exceeded.
         /// </summary>
         int MaxAllowedUserProfileInfoCalls { get; }
+
+        /// <summary>
+        /// Value for the x-ig-www-claim header
+        /// </summary>
+        string IGWWWClaim { get; }
+
+        /// <summary>
+        /// Value for the x-instagram-ajax header
+        /// </summary>
+        string IGAjax { get; }
     }
 }

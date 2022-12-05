@@ -27,8 +27,6 @@ namespace Liker.Instagram
                 // Miscellaneous
                 headers.Add("X-ASBD-ID"         , "198387");
                 headers.Add("X-IG-App-ID"       , INSTAGRAM_APP_ID);
-                headers.Add("X-IG-WWW-Claim"    , "hmac.AR07ZHlDUQP57dosHalfT1Oltkiyzk0vatBe02Rpyo_KoekC");
-                headers.Add("X-Instagram-AJAX"  , "1006554634");
 
                 // Security
                 headers.Add("Origin"                     , "https://www.instagram.com");
@@ -48,8 +46,10 @@ namespace Liker.Instagram
         {
             Options = options ?? throw new ArgumentNullException(nameof(options));
 
-            Client.AddDefaultHeader("X-CSRFToken", Options.CSRFToken);
-            Client.AddDefaultHeader("Cookie"     , $"csrftoken={Options.CSRFToken}; ds_user_id=49613149133; ig_did=76680F9A-B7C2-4DDF-BA26-5FACFBD75E89; ig_nrcb=1; mid=Y4GsCwALAAHC7gDdoAPxY_-bYwUD; rur=\"EAG\\05449613149133\\0541700979139:01f7c760001a2ae61af13ccac4e74b0b03f3a8ef0e1440bbc076611233629ced05719217\"; sessionid={Options.SessionID}; shbid=\"17549\\05449613149133\\0541700978997:01f73fcdff4e7884de6dd9710cfe8e25a3982f4b8bbe2d24c06296d6b40626cbb51ea4a2\"; shbts=\"1669442997\\05449613149133\\0541700978997:01f78ff68ec110707bc1856c55cdaf72c930deb1b3a634c8ca3e55cbc1ced0c83b658fc8\"");
+            Client.AddDefaultHeader("X-CSRFToken"     , Options.CSRFToken);
+            Client.AddDefaultHeader("Cookie"          , $"csrftoken={Options.CSRFToken}; ds_user_id=49613149133; ig_did=76680F9A-B7C2-4DDF-BA26-5FACFBD75E89; ig_nrcb=1; mid=Y4GsCwALAAHC7gDdoAPxY_-bYwUD; rur=\"EAG\\05449613149133\\0541700979139:01f7c760001a2ae61af13ccac4e74b0b03f3a8ef0e1440bbc076611233629ced05719217\"; sessionid={Options.SessionID}; shbid=\"17549\\05449613149133\\0541700978997:01f73fcdff4e7884de6dd9710cfe8e25a3982f4b8bbe2d24c06296d6b40626cbb51ea4a2\"; shbts=\"1669442997\\05449613149133\\0541700978997:01f78ff68ec110707bc1856c55cdaf72c930deb1b3a634c8ca3e55cbc1ced0c83b658fc8\"");
+            Client.AddDefaultHeader("X-IG-WWW-Claim"  , Options.IGWWWClaim);
+            Client.AddDefaultHeader("X-Instagram-AJAX", Options.IGAjax);
         }
 
         public void Dispose()

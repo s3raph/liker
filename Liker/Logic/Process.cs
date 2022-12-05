@@ -123,6 +123,59 @@ namespace Liker.Logic
                                         // Like one random post
 
                                         // todo: Not implemented yet
+
+                                        // Open API Sample integration code
+                                        //To use the OpenAI API, you will need to sign up for an API key and install the relevant C# client library.
+                                        //Once you have done this, you can use the API to access pre-trained models for object detection and facial recognition.
+
+                                        //Here is an example of how you might use the API to detect objects in an image using C#:
+                                        //                                        using OpenAI.SDK;
+
+                                        // Initialize the OpenAI API client
+//                                        var client = new OpenAIClient("<your-api-key>");
+
+//                                        // Load the image file
+//                                        var imageBytes = File.ReadAllBytes("<path-to-image-file>");
+
+//                                        // Use the object detection model to detect objects in the image
+//                                        var detectionResults = await client.ObjectDetection.DetectObjectsInImage(imageBytes, ObjectDetectionModel.YoloV3);
+
+//                                        // Print the detected objects and their bounding boxes
+//                                        foreach (var object in detectionResults.Objects)
+//{
+//                                            Console.WriteLine($"Object: {object.Name}");
+//                                            Console.WriteLine($"Bounding box: {object.BoundingBox.X}, {object.BoundingBox.Y}, {object.BoundingBox.Width}, {object.BoundingBox.Height}");
+//                                        }
+
+                                        /*
+                                         * This code will use the YOLO v3 object detection model to detect objects in the specified image and print the detected objects
+                                         * and their bounding boxes to the console.
+
+                                            To use the facial recognition model, you would need to use a similar process, but call the DetectFacesInImage method of the
+                                        FacialRecognition class instead of the DetectObjectsInImage method. This method will return information about any faces detected
+                                        in the image, such as the location of the faces within the image and the identities of any known individuals.
+
+                                            You can then use this information to exclude images that contain faces or pictures of children. For example, you could check
+                                        the number of faces detected in the image, and exclude any images that have more than a certain number of faces. Or you could
+                                        check the identities of any known individuals and exclude any images that contain a face that belongs to a child.
+
+                                            I hope this provides some guidance on how to integrate with the OpenAI API using C#. If you have any further questions, feel
+                                        free to ask and I will do my best to help.
+
+                                                                                    When using an object detection model to identify objects in an image, the model will
+                                        typically return a list of detected objects, along with their bounding boxes and class labels. The class labels indicate the type
+                                        of object that was detected, and the possible class labels will depend on the specific object detection model being used.
+
+                                            For example, if you are using the YOLO v3 object detection model, you might expect to get back class labels such as "person",
+                                        "car", "dog", "cat", "toy", "model", etc. These are some of the common object classes that the YOLO v3 model is trained to detect.
+
+                                            However, it's important to note that the specific set of class labels that a model can detect will depend on the training
+                                        data it was trained on. If the model was not trained on a particular class of objects, it may not be able to detect that class of objects. In other words, the set of possible class labels returned by the model is not fixed, and can vary depending on the specific model and its training data.
+
+                                            Additionally, the accuracy and effectiveness of the object detection model will depend on the quality of the training data
+                                        and the specific conditions in which it is used. It's always a good idea to test and evaluate the performance of any model before
+                                        using it in a production environment.
+                                        */
                                     }
                                 }
 

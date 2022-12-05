@@ -16,9 +16,11 @@ namespace Liker
         /// </summary>
         class CommandLineOptions : IInstagramOptions, IProcessOptions
         {
+            /// <inheritdoc/>
             [Option('c', "csrf-token", Required = true, HelpText = "CSRF Bearer token to use on HTTP requests to Instagram.")]
             public string CSRFToken { get; set; } = string.Empty;
 
+            /// <inheritdoc/>
             [Option('s', "session-id", Required = true, HelpText = "Session ID to use on HTTP requests to Instagram.")]
             public string SessionID { get; set; } = string.Empty;
 
@@ -36,6 +38,14 @@ namespace Liker
 
             /// <inheritdoc/>
             public int MaxAllowedUserProfileInfoCalls => 400;
+
+            /// <inheritdoc/>
+            [Option('w', "ig-www-claim", Required = true, HelpText = "Value for the x-ig-www-claim header")]
+            public string IGWWWClaim { get; set; } = string.Empty;
+
+            /// <inheritdoc/>
+            [Option('j', "ig-ajax", Required = true, HelpText = "Value for the x-instagram-ajax header")]
+            public string IGAjax { get; set; } = string.Empty;
         }
 
         static Task Main(string[] args) =>
