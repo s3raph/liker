@@ -69,22 +69,30 @@ namespace Liker
                        // Run process
                        try
                        {
+                           CancellationTokenSource tokenSource;
+                           Task runTask;
+
                            if (options.RuntimeLimit > 0)
                            {
-                               Console.WriteLine($"Launching run at {DateTime.Now} - runtime limit is {options.RuntimeLimit} minutes");
-                               var tokenSource = new CancellationTokenSource(new TimeSpan(0, options.RuntimeLimit, 0));
-                               await process.Run(options.Accounts, tokenSource.Token);
+                               Console.WriteLine($"Launching run at {DateTime.Now} - runtime limit is {options.RuntimeLimit} minutes\n\nHit any key to quit");
+
+                               tokenSource = new CancellationTokenSource(new TimeSpan(0, options.RuntimeLimit, 0));
+                               runTask     = process.Run(options.Accounts, tokenSource.Token);
                            }
                            else
                            {
-                               Console.WriteLine("Launching run - no runtime limit specified");
-                               await process.Run(options.Accounts);
+                               Console.WriteLine("Launching run - no runtime limit specified\n\nHit any key to quit");
+
+                               tokenSource = new CancellationTokenSource();
+                               runTask     = process.Run(options.Accounts, tokenSource.Token);
                            }
+
+                           await Task.WhenAll(runTask, WatchForUserKeyPress(tokenSource));
                        }
                        catch (OperationCanceledException)
                        {
                            runTime.Stop();
-                           Console.WriteLine($"Liking limit hit - ran for {runTime.Elapsed}");
+                           Console.WriteLine($"Liking limit terminated - ran for {runTime.Elapsed}");
                        }
                        catch (Exception ex)
                        {
@@ -93,6 +101,21 @@ namespace Liker
                            Environment.Exit(-1);
                        }
                    });
+
+        private static async Task WatchForUserKeyPress(CancellationTokenSource tokenSource)
+        {
+            while (!tokenSource.IsCancellationRequested)
+            {
+                if (Console.Read() != -1)
+                {
+                    tokenSource.Cancel();
+                }
+                else
+                {
+                    await Task.Delay(250);
+                }
+            }
+        }
 
         private static IKernel SetupServiceBindings(CommandLineOptions commandLineOptions)
         {
