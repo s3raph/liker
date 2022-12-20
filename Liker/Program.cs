@@ -74,25 +74,25 @@ namespace Liker
 
                            if (options.RuntimeLimit > 0)
                            {
-                               Console.WriteLine($"Launching run at {DateTime.Now} - runtime limit is {options.RuntimeLimit} minutes\n\nHit any key to quit");
+                               Console.WriteLine($"Launching run at {DateTime.Now} - runtime limit is {options.RuntimeLimit} minutes\n\nHit any key to quit\n");
 
                                tokenSource = new CancellationTokenSource(new TimeSpan(0, options.RuntimeLimit, 0));
                                runTask     = process.Run(options.Accounts, tokenSource.Token);
                            }
                            else
                            {
-                               Console.WriteLine("Launching run - no runtime limit specified\n\nHit any key to quit");
+                               Console.WriteLine("Launching run - no runtime limit specified\n\nHit any key followed by Enter to quit\n");
 
                                tokenSource = new CancellationTokenSource();
                                runTask     = process.Run(options.Accounts, tokenSource.Token);
                            }
 
-                           await Task.WhenAll(runTask, WatchForUserKeyPress(tokenSource));
+                           await Task.WhenAll(runTask, WatchForUserKeyPress(tokenSource, runTask));
                        }
                        catch (OperationCanceledException)
                        {
                            runTime.Stop();
-                           Console.WriteLine($"Liking limit terminated - ran for {runTime.Elapsed}");
+                           Console.WriteLine($"Liking run terminated - ran for {runTime.Elapsed}");
                        }
                        catch (Exception ex)
                        {
@@ -102,17 +102,18 @@ namespace Liker
                        }
                    });
 
-        private static async Task WatchForUserKeyPress(CancellationTokenSource tokenSource)
+        private static async Task WatchForUserKeyPress(CancellationTokenSource tokenSource, Task runTask)
         {
-            while (!tokenSource.IsCancellationRequested)
+            while (!tokenSource.IsCancellationRequested && !runTask.IsFaulted)
             {
-                if (Console.Read() != -1)
+                if (Console.KeyAvailable)
                 {
+                    Console.ReadKey(true);
                     tokenSource.Cancel();
                 }
                 else
                 {
-                    await Task.Delay(250);
+                    await Task.Delay(100);
                 }
             }
         }

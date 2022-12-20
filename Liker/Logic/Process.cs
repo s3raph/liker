@@ -6,6 +6,7 @@ namespace Liker.Logic
 {
     public class Process
     {
+        private const int QTY_POSTS_TO_LIKE_ON_EACH_USER = 5;
         private readonly IInstagramService InstaService;
         private readonly IDatabase Database;
         private readonly IProcessOptions Options;
@@ -103,12 +104,14 @@ namespace Liker.Logic
                                         accountsLiked++;
 
                                         // Like random selection of <5 posts
-                                        var randomPosts = postsWithTags.TakeRandom(5).ToList();
+                                        var randomPosts = postsWithTags.TakeRandom(QTY_POSTS_TO_LIKE_ON_EACH_USER).ToList();
 
                                         follower.PostsLiked = 0;
 
                                         foreach (var post in randomPosts)
                                         {
+                                            token.ThrowIfCancellationRequested();
+
                                             await DelayByRandom(Options.DelaySeed);
                                             await InstaService.LikeAsync(post.Pk, token);
                                             follower.PostsLiked++;
