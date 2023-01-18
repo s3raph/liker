@@ -1,5 +1,8 @@
 ﻿namespace Liker.Instagram
 {
+    /// <summary>
+    /// Options for working with <see cref="InstagramService"/>.
+    /// </summary>
     public interface IInstagramOptions
     {
         /// <summary>

@@ -2,6 +2,9 @@
 
 namespace Liker.Persistence
 {
+    /// <summary>
+    /// Abstraction for interacting with the database.
+    /// </summary>
     public interface IDatabase
     {
         Task<IReadOnlyCollection<AccountFollower>> GetFollowersAsync(params string[] followerPks);
