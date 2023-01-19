@@ -1,6 +1,7 @@
 ﻿using Liker.Instagram;
 using Liker.Logic;
 using Moq;
+using System.Net;
 
 namespace Liker.Tests
 {
@@ -13,6 +14,81 @@ namespace Liker.Tests
             Process instance = MakeProcessInstance();
 
             Assert.IsFalse(instance.DoesTextContainAnyHashTags(null));
+        }
+
+        [TestMethod]
+        public async Task RetryStatusCodeZero_Basic()
+        {
+            Assert.AreEqual(1, await Process.RetryStatusCodeZero(() => Task.FromResult(1)));
+        }
+
+        [TestMethod]
+        public async Task RetryStatusCodeZero_ThrowsOnFirstInvocation()
+        {
+            int invocationCount = 0;
+
+            var result = await Process.RetryStatusCodeZero(() =>
+            {
+                invocationCount++;
+
+                if (invocationCount == 1)
+                {
+                    throw new InstagramRESTException("Waffles", 0, default, default);
+                }
+
+                return Task.FromResult(invocationCount);
+            });
+
+            Assert.AreEqual(2, invocationCount);
+            Assert.AreEqual(2, result);
+        }
+
+        [TestMethod]
+        public async Task RetryStatusCodeZero_PropagatesAfterFirstHandledException()
+        {
+            int invocationCount = 0;
+
+            await Assert.ThrowsExceptionAsync<InstagramRESTException>(() =>
+                Process.RetryStatusCodeZero<int>(() =>
+                {
+                    invocationCount++;
+
+                    throw new InstagramRESTException("Waffles", 0, default, default);
+                }));
+
+            Assert.AreEqual(2, invocationCount);
+        }
+
+        [TestMethod]
+        public async Task RetryStatusCodeZero_PropagatesNonZeroStatusCodes()
+        {
+            int invocationCount = 0;
+
+            await Assert.ThrowsExceptionAsync<InstagramRESTException>(() =>
+                Process.RetryStatusCodeZero<int>(() =>
+                {
+                    invocationCount++;
+
+                    throw new InstagramRESTException("Waffles", HttpStatusCode.BadRequest, default, default);
+                }));
+
+            Assert.AreEqual(1, invocationCount);
+        }
+
+        [TestMethod]
+        public async Task RetryStatusCodeZero_PropagatesNonRESTExceptions()
+        {
+            int invocationCount = 0;
+
+            await Assert.ThrowsExceptionAsync<Exception>(() =>
+                Process.RetryStatusCodeZero<int>(() =>
+                {
+                    invocationCount++;
+
+                    throw new Exception("Waffles");
+                }));
+
+            Assert.AreEqual(1, invocationCount);
         }
 
         private static Process MakeProcessInstance()

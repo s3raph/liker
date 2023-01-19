@@ -7,6 +7,8 @@ namespace Liker.Logic
     public class Process
     {
         private const int QTY_POSTS_TO_LIKE_ON_EACH_USER = 5;
+        private const int TIMES_TO_RETRY                 = 1;
+
         private readonly IInstagramService InstaService;
         private readonly IDatabase Database;
         private readonly IProcessOptions Options;
@@ -22,7 +24,7 @@ namespace Liker.Logic
         }
 
         /// <summary>
-        ///
+        /// Start the process.
         /// </summary>
         /// <param name="accountsToProcess"></param>
         /// <param name="token"></param>
@@ -64,7 +66,7 @@ namespace Liker.Logic
                     {
                         token.ThrowIfCancellationRequested();
 
-                        currentPage = await InstaService.GetUserFollowersAsync(account, currentPage?.NextPageOptions ?? GetFollowersFirstPageOptions);
+                        currentPage = await RetryStatusCodeZero(() => InstaService.GetUserFollowersAsync(account, currentPage?.NextPageOptions ?? GetFollowersFirstPageOptions), TIMES_TO_RETRY);
 
                         // filter out followers if they exist in database
                         var databaseFollowers = await Database.GetFollowersDictionaryAsync(currentPage.Select(f => f.UserID).ToArray());
@@ -86,7 +88,7 @@ namespace Liker.Logic
                             {
                                 await DelayByRandom(Options.DelaySeed);
 
-                                var userProfile = await InstaService.GetUserProfile(follower.Username, token);
+                                var userProfile = await RetryStatusCodeZero(() => InstaService.GetUserProfile(follower.Username, token));
 
                                 // insert into database
                                 follower.FollowerCount = userProfile.FollowerCount;
@@ -97,7 +99,7 @@ namespace Liker.Logic
                                     !userProfile.FollowedByViewer   &&
                                     !userProfile.FollowsViewer)
                                 {
-                                    IEnumerable<Post> postsWithTags = await GetPostsForLiking(follower.Username, token);
+                                    IEnumerable<Post> postsWithTags = await RetryStatusCodeZero(() => GetPostsForLiking(follower.Username, token));
 
                                     if (postsWithTags.Any())
                                     {
@@ -113,7 +115,7 @@ namespace Liker.Logic
                                             token.ThrowIfCancellationRequested();
 
                                             await DelayByRandom(Options.DelaySeed);
-                                            await InstaService.LikeAsync(post.Pk, token);
+                                            await RetryStatusCodeZero(() => InstaService.LikeAsync(post.Pk, token));
                                             follower.PostsLiked++;
                                             postsLiked++;
                                         }
@@ -122,6 +124,7 @@ namespace Liker.Logic
                                     }
                                     else
                                     {
+                                        /*
                                         // find any photos that don't contain a face
                                         // Like one random post
 
@@ -178,6 +181,7 @@ namespace Liker.Logic
                                             Additionally, the accuracy and effectiveness of the object detection model will depend on the quality of the training data
                                         and the specific conditions in which it is used. It's always a good idea to test and evaluate the performance of any model before
                                         using it in a production environment.
+
                                         */
                                     }
                                 }
@@ -209,10 +213,69 @@ namespace Liker.Logic
             }
         }
 
+        public static Task RetryStatusCodeZero(Func<Task> toInvoke, int timesToRetry = TIMES_TO_RETRY) =>
+            RetryStatusCodeZero<int>(() => toInvoke().ContinueWith<int>(t => 0), timesToRetry)
+                .ContinueWith(t => 0);
+
+        /// <summary>
+        /// Retry a function that returns a Task, if the task throws an exception.
+        /// timesToRetry is the number of failures to retry, not including the
+        /// initial attempt.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="toInvoke">
+        /// The function to invoke. It should return a Task.
+        /// </param>
+        /// <param name="timesToRetry">
+        /// The number of failures to retry, not including the initial attempt.
+        /// </param>
+        /// <returns></returns>
+        /// <exception cref="Exception"></exception>
+        public static async Task<T> RetryStatusCodeZero<T>(Func<Task<T>> toInvoke, int timesToRetry = TIMES_TO_RETRY)
+        {
+            var exceptions = new List<Exception>();
+
+            for (int i = 0; i <= timesToRetry; i++)
+            {
+                try
+                {
+                    return await toInvoke();
+                }
+                catch (InstagramRESTException ex) when (ex.StatusCode == 0)
+                {
+                    if (i >= timesToRetry)
+                    {
+                        throw;
+                        //throw new AggregateException(exceptions);
+                    }
+                    else
+                    {
+                        exceptions.Add(ex);
+                        Console.WriteLine($"Warning: Handled InstagramRESTException (HTTP status {ex.StatusCode}) - {ex.Message}");
+                        await DelayByRandom(5000);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    throw;
+                }
+            }
+
+            throw new Exception("Should never get here");
+        }
+
+        /// <summary>
+        /// Retrieves the first two pages of posts from the given account and
+        /// returns all posts that match the that match DoesTextContainAnyHashTags
+        /// and haven't already been liked.
+        /// </summary>
+        /// <param name="userName"></param>
+        /// <param name="token"></param>
+        /// <returns></returns>
         private async Task<IEnumerable<Post>> GetPostsForLiking(string userName, CancellationToken token)
         {
-            var option = new PageOptions();
-            var pagesRetrieved = 0;
+            PageOptions option = new();
+            int pagesRetrieved = 0;
 
             while (pagesRetrieved++ < 2)
             {
@@ -226,7 +289,7 @@ namespace Liker.Logic
                 {
                     return posts;
                 }
-                else if (postsPage.IsThereAnotherPage)
+                else if (postsPage.IsThereAnotherPage && postsPage.NextPageOptions != null)
                 {
                     option = postsPage.NextPageOptions;
                     await DelayByRandom(Options.DelaySeed);
@@ -240,6 +303,12 @@ namespace Liker.Logic
             return Enumerable.Empty<Post>();
         }
 
+        /// <summary>
+        /// Returns true if the text contains any of the hashtags in the
+        /// Options.HashtagsToLike property.
+        /// </summary>
+        /// <param name="text"></param>
+        /// <returns></returns>
         public bool DoesTextContainAnyHashTags(string text) => string.IsNullOrEmpty(text) ? false : HashTagRegex.IsMatch(text);
 
         private static Random Randy = new Random();
