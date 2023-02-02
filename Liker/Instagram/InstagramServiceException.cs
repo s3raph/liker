@@ -12,9 +12,7 @@ namespace Liker.Instagram
     {
         public InstagramServiceException(string message) : base(message) { }
 
-        protected InstagramServiceException(SerializationInfo info, StreamingContext context) : base(info, context)
-        {
-        }
+        protected InstagramServiceException(SerializationInfo info, StreamingContext context) : base(info, context) { }
     }
 
     /// <summary>
@@ -23,21 +21,52 @@ namespace Liker.Instagram
     [Serializable]
     internal class InstagramRESTException : InstagramServiceException
     {
-        public HttpStatusCode StatusCode { get; }
-        public RestRequest? Request      { get; }
-        public RestResponse? Response    { get; }
+        public HttpStatusCode StatusCode { get; private set; }
+        public string? StatusDescription { get; private set; }
+        public Uri? ResponseUri          { get; private set; }
 
-        private InstagramRESTException() : base(string.Empty) { }
 
-        public InstagramRESTException(string message, HttpStatusCode statusCode, RestRequest request, RestResponse response) : base(message)
+        public InstagramRESTException(RestResponse response)
+            : base($"Received {response.StatusCode} ({response.StatusDescription}) from request to {response.ResponseUri}")
         {
-            StatusCode = statusCode;
-            Request    = request;
-            Response   = response;
+            StatusCode        = response.StatusCode;
+            StatusDescription = response.StatusDescription;
+            ResponseUri       = response.ResponseUri;
         }
 
-        protected InstagramRESTException(SerializationInfo info, StreamingContext context) : base(info, context)
+        public InstagramRESTException(string message, RestResponse response)
+            : base(message)
         {
+            StatusCode        = response.StatusCode;
+            StatusDescription = response.StatusDescription;
+            ResponseUri       = response.ResponseUri;
+        }
+
+        protected InstagramRESTException(SerializationInfo info, StreamingContext context)
+            : base(info, context)
+        {
+            if (info.GetValue(nameof(StatusCode), typeof(HttpStatusCode)) is HttpStatusCode stat)
+            {
+                StatusCode = stat;
+            }
+
+            StatusDescription = info.GetString(nameof(StatusDescription));
+            ResponseUri       = info.GetValue (nameof(ResponseUri), typeof(Uri)) as Uri;
+        }
+
+        public override void GetObjectData(SerializationInfo info, StreamingContext context)
+        {
+            if (info == null)
+            {
+                throw new ArgumentNullException(nameof(info));
+            }
+
+            info.AddValue(nameof(StatusCode)       , StatusCode);
+            info.AddValue(nameof(StatusDescription), StatusDescription);
+            info.AddValue(nameof(ResponseUri)      , ResponseUri);
+
+            // MUST call through to the base class to let it save its own state
+            base.GetObjectData(info, context);
         }
     }
 }

@@ -1,7 +1,6 @@
 ﻿using Liker.Instagram;
 using Liker.Logic;
 using Moq;
-using System.Net;
 
 namespace Liker.Tests
 {
@@ -33,7 +32,7 @@ namespace Liker.Tests
 
                 if (invocationCount == 1)
                 {
-                    throw new InstagramRESTException("Waffles", 0, default, default);
+                    throw new InstagramRESTException("Waffles", default);
                 }
 
                 return Task.FromResult(invocationCount);
@@ -53,7 +52,7 @@ namespace Liker.Tests
                 {
                     invocationCount++;
 
-                    throw new InstagramRESTException("Waffles", 0, default, default);
+                    throw new InstagramRESTException("Waffles", default);
                 }));
 
             Assert.AreEqual(2, invocationCount);
@@ -69,7 +68,7 @@ namespace Liker.Tests
                 {
                     invocationCount++;
 
-                    throw new InstagramRESTException("Waffles", HttpStatusCode.BadRequest, default, default);
+                    throw new InstagramRESTException("Waffles", default);
                 }));
 
             Assert.AreEqual(1, invocationCount);
@@ -97,6 +96,7 @@ namespace Liker.Tests
             var db           = new Mock<Persistence.IDatabase>();
             var options      = new Mock<IProcessOptions>();
             var instance     = new Logic.Process(instaService.Object, db.Object, options.Object);
+
             return instance;
         }
     }

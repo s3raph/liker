@@ -1,5 +1,6 @@
 ﻿using RestSharp;
 using System.Collections.ObjectModel;
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -11,7 +12,8 @@ namespace Liker.Instagram
         private const string USER_AGENT       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36 Edg/107.0.1418.35";
         private const string INSTAGRAM_APP_ID = "936619743392459";
 
-        private readonly Dictionary<string, string> HandleToUserIDCache = new Dictionary<string, string>();
+        private readonly Dictionary<string, int> NumberOfCallsMadeByUri = new();
+        private readonly Dictionary<string, string> HandleToUserIDCache = new();
         private readonly IInstagramOptions Options;
         private readonly RestClient Client = new RestClient(
             new RestClientOptions("https://www.instagram.com/")
@@ -40,8 +42,7 @@ namespace Liker.Instagram
                 headers.Add("Sec-Fetch-Site"             , "same-origin");
             });
 
-        private bool _disposed            = false;
-        private int _userProfileCallsMade = 0;
+        private bool _disposed = false;
 
         public InstagramService(IInstagramOptions options)
         {
@@ -73,84 +74,37 @@ namespace Liker.Instagram
                 HandleToUserIDCache.Add(userHandle, userId);
             }
 
-            var request = new RestRequest($"/api/v1/friendships/{userId}/followers/?{pageOptions.AsQueryString()}&search_surface=follow_list_page", Method.Get);
+            var friendshipsPage = await InvokeRequest(
+                new RestRequest($"/api/v1/friendships/{userId}/followers/?{pageOptions.AsQueryString()}&search_surface=follow_list_page", Method.Get),
+                response => DeserializePage<FriendShip>(response.RawBytes, "users"));
 
-            var response = await Client.ExecuteAsync(request);
+            var statuses = friendshipsPage.Any() ? await GetFriendShipStatuses(friendshipsPage.Select(f => f.Pk).ToArray(), cancellationToken) : new Dictionary<string, ExtendedFollowerInfo>();
 
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (!response.IsSuccessStatusCode)
+            return new Page<AccountFollower>(friendshipsPage.Select(f =>
             {
-                throw new InstagramRESTException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response.StatusCode, request, response);
-            }
+                statuses.TryGetValue(f.PkId, out var status);
 
-            var jsonObj = JsonNode.Parse(response.Content).AsObject();
-            var users   = jsonObj["users"].Deserialize<Collection<FriendShip>>();
-
-            var statuses = await GetFriendShipStatuses(users.Select(f => f.Pk).ToArray(), cancellationToken);
-
-            if (jsonObj.TryGetPropertyValue("next_max_id", out var nextMaxNode))
-            {
-                return new Page<AccountFollower>(users.Select(f =>
+                return new AccountFollower
                 {
-                    var status = statuses[f.Pk];
-                    return new AccountFollower
-                    {
-                        UserID       = f.Pk,
-                        Username     = f.Username,
-                        IsPrivate    = f.IsPrivate,
-                        Following    = status.Following,
-                        IsRestricted = status.IsRestricted
-                    };
-                }).ToList())
-                {
-                    IsThereAnotherPage = true,
-                    NextPageOptions    = new PageOptions { MaxID = nextMaxNode.GetValue<string>() }
+                    UserID       = f.Pk,
+                    Username     = f.Username,
+                    IsPrivate    = f.IsPrivate,
+                    Following    = status?.Following,
+                    IsRestricted = status?.IsRestricted
                 };
-            }
-            else
+            }).ToList())
             {
-                return new Page<AccountFollower>(users.Select(f =>
-                {
-                    var status = statuses[f.Pk];
-                    return new AccountFollower
-                    {
-                        UserID       = f.Pk,
-                        Username     = f.Username,
-                        IsPrivate    = f.IsPrivate,
-                        Following    = status.Following,
-                        IsRestricted = status.IsRestricted
-                    };
-                }).ToList())
-                {
-                    IsThereAnotherPage = false
-                };
-            }
+                NextPageOptions = friendshipsPage.NextPageOptions
+            };
         }
 
         /// <inheritdoc/>
-        public async Task<UserProfile> GetUserProfile(string userName, CancellationToken cancellationToken)
-        {
-            if (++_userProfileCallsMade > Options.MaxAllowedUserProfileInfoCalls)
-            {
-                throw new InstagramLimitsExceededException($"Max allowed calls to /api/v1/users/web_profile_info/ exceeded - threshold set at {Options.MaxAllowedUserProfileInfoCalls}");
-            }
-
-            // Got 429 too many requests response on this after a couple of hours - I suspect the rough volume is >500 requests
-            try
-            {
-                var request  = new RestRequest($"/api/v1/users/web_profile_info/?username={userName}", Method.Get);
-                var response = await Client.ExecuteAsync(request);
-
-                cancellationToken.ThrowIfCancellationRequested();
-
-                if (!response.IsSuccessStatusCode)
+        public Task<UserProfile> GetUserProfile(string userName, CancellationToken cancellationToken) =>
+            InvokeRequest(
+                new RestRequest($"/api/v1/users/web_profile_info/?username={userName}", Method.Get),
+                response =>
                 {
-                    throw new InstagramRESTException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response.StatusCode, request, response);
-                }
-                else
-                {
-                    var jsonObj = JsonNode.Parse(response.Content).AsObject();
+                    var jsonObj = ParseJsonObject(response.RawBytes);
 
                     return new UserProfile
                     {
@@ -161,96 +115,154 @@ namespace Liker.Instagram
                         HasBlockedViewer = jsonObj["data"]["user"]["has_blocked_viewer"].GetValue<bool>(),
                         FollowerCount    = jsonObj["data"]["user"]["edge_followed_by"]["count"].GetValue<int>()
                     };
-                }
-            }
-            catch (Exception)
-            {
+                });
 
-                throw;
-            }
-
-            throw new InstagramServiceException($"Failed to {nameof(GetUserProfile)}");
-        }
-
-        private async Task<IReadOnlyDictionary<string, ExtendedFollowerInfo>> GetFriendShipStatuses(string[] userIds, CancellationToken cancellationToken)
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="userIds"></param>
+        /// <param name="cancellationToken"></param>
+        /// <returns></returns>
+        /// <exception cref="InstagramServiceException"></exception>
+        private Task<IReadOnlyDictionary<string, ExtendedFollowerInfo>> GetFriendShipStatuses(string[] userIds, CancellationToken cancellationToken)
         {
+            if (!userIds.Any()) return Task.FromResult<IReadOnlyDictionary<string, ExtendedFollowerInfo>>(new Dictionary<string, ExtendedFollowerInfo>());
+
             var request = new RestRequest("/api/v1/friendships/show_many/", Method.Post);
+
             request.AddHeader("Content-Type", "application/x-www-form-urlencoded");
             request.AddBody($"user_ids={string.Join("%2C", userIds)}");
-            var response = await Client.ExecuteAsync(request);
 
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new InstagramRESTException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response.StatusCode, request, response);
-            }
-            else
-            {
-                var jsonObj = JsonNode.Parse(response.Content).AsObject();
-
-                if (jsonObj.TryGetPropertyValue("friendship_statuses", out JsonNode? node))
+            return InvokeRequest<IReadOnlyDictionary<string, ExtendedFollowerInfo>>(
+                request,
+                response =>
                 {
-                    return node.Deserialize<Dictionary<string, ExtendedFollowerInfo>>();
-                }
-            }
-
-            throw new InstagramServiceException($"Failed to {nameof(GetFriendShipStatuses)}");
-        }
-
-        /// <inheritdoc/>
-        public async Task<Page<Post>> GetUserFeedAsync(string userHandle, PageOptions pageOptions, CancellationToken cancellationToken = default)
-        {
-            var request = new RestRequest($"/api/v1/feed/user/{userHandle}/username/?{pageOptions.AsQueryString()}", Method.Get);
-
-            var response = await Client.ExecuteAsync(request);
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new InstagramRESTException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response.StatusCode, request, response);
-            }
-            else
-            {
-                var jsonObj = JsonNode.Parse(response.Content).AsObject();
-
-                if (jsonObj.TryGetPropertyValue("items", out JsonNode? node))
-                {
-                    if (jsonObj.TryGetPropertyValue("next_max_id", out var nextMaxNode))
+                    if (ParseJsonObject(response.RawBytes).TryGetPropertyValue("friendship_statuses", out JsonNode? node))
                     {
-                        return new Page<Post>(node.Deserialize<List<Post>>())
-                        {
-                            IsThereAnotherPage = true,
-                            NextPageOptions    = new PageOptions { MaxID = nextMaxNode.GetValue<string>() }
-                        };
+                        return node.Deserialize<Dictionary<string, ExtendedFollowerInfo>>();
                     }
                     else
                     {
-                        return new Page<Post>(node.Deserialize<List<Post>>())
-                        {
-                            IsThereAnotherPage = false
-                        };
+                        throw new InstagramServiceException($"Failed to {nameof(GetFriendShipStatuses)}");
                     }
-                }
-            }
-
-            throw new InstagramServiceException($"Failed to {nameof(GetUserFeedAsync)}");
+                });
         }
+
+        /// <inheritdoc/>
+        public Task<Page<Post>> GetUserFeedAsync(string userHandle, PageOptions pageOptions, CancellationToken cancellationToken = default) =>
+            InvokeRequest(
+                new RestRequest($"/api/v1/feed/user/{userHandle}/username/?{pageOptions.AsQueryString()}", Method.Get),
+                response => DeserializePage<Post>(response.RawBytes, "items"));
 
         /// <inheritdoc/>
         public async Task LikeAsync(string postId, CancellationToken cancellationToken = default)
         {
             var request = new RestRequest($"/api/v1/web/likes/{postId}/like/", Method.Post);
 
-            var response = await Client.ExecuteAsync(request);
+            var responseTask = Client.ExecuteAsync(request);
 
-            cancellationToken.ThrowIfCancellationRequested();
+            IncrementRequestCountForResource(request);
+
+            var response = await responseTask;
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new InstagramRESTException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response.StatusCode, request, response);
+                throw MakeInstagramExceptionFromResponse(response);
             }
+        }
+
+        private async Task<T> InvokeRequest<T>(RestRequest request, Func<RestResponse, T> resultProcessing)
+        {
+            var responseTask = Client.ExecuteAsync(request);
+
+            IncrementRequestCountForResource(request);
+
+            var response = await responseTask;
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw MakeInstagramExceptionFromResponse(response);
+            }
+            else
+            {
+                return resultProcessing(response);
+            }
+        }
+
+        /// <summary>
+        /// Helper method that checks if NumberOfCallsMadeByUri contains the given
+        /// Resource and if not adds it.
+        /// </summary>
+        /// <param name="request"></param>
+        private void IncrementRequestCountForResource(RestRequest request)
+        {
+            if (NumberOfCallsMadeByUri.TryGetValue(request.Resource, out int callCount))
+            {
+                NumberOfCallsMadeByUri[request.Resource] = callCount + 1;
+            }
+            else
+            {
+                NumberOfCallsMadeByUri[request.Resource] = 1;
+            }
+        }
+
+        /// <summary>
+        /// Helper method that ensures the appropriate exception type, enriched with the relevant
+        /// supporting information is thrown for a given HTTP status code.
+        /// </summary>
+        /// <param name="response"></param>
+        /// <returns></returns>
+        private InstagramServiceException MakeInstagramExceptionFromResponse(RestResponse response)
+        {
+            var request = response.Request ?? throw new ArgumentOutOfRangeException(nameof(response), $"{nameof(response.Request)} must not be null");
+
+            switch (response.StatusCode)
+            {
+                case HttpStatusCode.TooManyRequests:
+                    return new InstagramRESTLimitsExceededException(response, NumberOfCallsMadeByUri[request.Resource]);
+                default:
+                    return new InstagramRESTException($"Request {request.Resource} failed - Status {response.StatusCode}: {response.StatusDescription}", response);
+            }
+        }
+
+        /// <summary>
+        /// Takes raw response content and parses a <see cref="Page{T}"/>
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="rawBytes"></param>
+        /// <param name="collectionPropertyName"></param>
+        /// <param name="nextMaxIdPropertyName"></param>
+        /// <returns></returns>
+        /// <exception cref="InstagramServiceException"></exception>
+        private static Page<T> DeserializePage<T>(ReadOnlySpan<byte> rawBytes, string collectionPropertyName, string nextMaxIdPropertyName = "next_max_id")
+        {
+            JsonObject rootObj = ParseJsonObject(rawBytes);
+
+            if (rootObj.TryGetPropertyValue(collectionPropertyName, out JsonNode? node) && node is JsonArray)
+            {
+                var items = node.Deserialize<List<T>>() ?? new List<T>();
+
+                if (rootObj.TryGetPropertyValue(nextMaxIdPropertyName, out var nextMaxNode) && nextMaxNode is JsonNode)
+                {
+                    return new Page<T>(items)
+                    {
+                        NextPageOptions = new PageOptions { MaxID = nextMaxNode.GetValue<string>() }
+                    };
+                }
+                else
+                {
+                    return new Page<T>(items);
+                }
+            }
+
+            throw new InstagramServiceException("Failed to deserialize page");
+        }
+
+        private static JsonObject ParseJsonObject(ReadOnlySpan<byte> rawBytes)
+        {
+            var rootNode = JsonNode.Parse(rawBytes);
+            var rootObj  = rootNode?.AsObject() ?? throw new InstagramServiceException($"Failed to parse root JsonObject from {nameof(rawBytes)}");
+            return rootObj;
         }
     }
 }

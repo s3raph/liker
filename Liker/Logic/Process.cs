@@ -70,7 +70,7 @@ namespace Liker.Logic
 
                         // filter out followers if they exist in database
                         var databaseFollowers = await Database.GetFollowersDictionaryAsync(currentPage.Select(f => f.UserID).ToArray());
-                        var filteredPage = currentPage.Where(f => !databaseFollowers.ContainsKey(f.UserID));
+                        var filteredPage      = currentPage.Where(f => !databaseFollowers.ContainsKey(f.UserID));
 
                         accountsVisited += filteredPage.Count();
 
@@ -79,7 +79,7 @@ namespace Liker.Logic
                         {
                             token.ThrowIfCancellationRequested();
 
-                            if (follower.IsRestricted || follower.IsPrivate)
+                            if (follower.IsRestricted ?? false || follower.IsPrivate)
                             {
                                 // insert into database
                                 await Database.InsertFollowerAsync(follower);
@@ -201,7 +201,7 @@ namespace Liker.Logic
                     await Database.DeleteAccountAsync(account);
                 }
             }
-            catch(InstagramLimitsExceededException ex)
+            catch(InstagramRESTLimitsExceededException ex)
             {
                 Console.WriteLine("Hit limit of allowed Instagram calls - message reads: " + ex.Message);
             }
@@ -243,21 +243,17 @@ namespace Liker.Logic
                 }
                 catch (InstagramRESTException ex) when (ex.StatusCode == 0)
                 {
-                    if (i >= timesToRetry)
+                    exceptions.Add(ex);
+
+                    if (i < timesToRetry)
                     {
-                        throw;
-                        //throw new AggregateException(exceptions);
+                        Console.WriteLine($"Warning: Handled {nameof(InstagramRESTException)} (HTTP status {ex.StatusCode}) - {ex.Message}");
+                        await DelayByRandom(5000);
                     }
                     else
                     {
-                        exceptions.Add(ex);
-                        Console.WriteLine($"Warning: Handled InstagramRESTException (HTTP status {ex.StatusCode}) - {ex.Message}");
-                        await DelayByRandom(5000);
+                        throw;
                     }
-                }
-                catch (Exception ex)
-                {
-                    throw;
                 }
             }
 
@@ -279,11 +275,13 @@ namespace Liker.Logic
 
             while (pagesRetrieved++ < 2)
             {
+                token.ThrowIfCancellationRequested();
+
                 // retrieve first NUM (default 12) follower posts (and thumbnails)
                 var postsPage = await InstaService.GetUserFeedAsync(userName, option, token);
 
                 // if can find posts with known hashtags
-                var posts = postsPage.Where(p => !p.HasLiked && DoesTextContainAnyHashTags(p.Caption?.Text));
+                var posts = postsPage.Where(p => !p.HasLiked && DoesTextContainAnyHashTags(p.Caption?.Text ?? string.Empty));
 
                 if (posts.Any())
                 {
@@ -291,6 +289,8 @@ namespace Liker.Logic
                 }
                 else if (postsPage.IsThereAnotherPage && postsPage.NextPageOptions != null)
                 {
+                    token.ThrowIfCancellationRequested();
+
                     option = postsPage.NextPageOptions;
                     await DelayByRandom(Options.DelaySeed);
                 }
