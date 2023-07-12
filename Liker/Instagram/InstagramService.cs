@@ -64,6 +64,7 @@ namespace Liker.Instagram
         }
 
         /// <inheritdoc/>
+        [Retry]
         public async Task<Page<AccountFollower>> GetUserFollowersAsync(string userHandle, PageOptions pageOptions, CancellationToken cancellationToken = default)
         {
             string userId;
@@ -99,6 +100,7 @@ namespace Liker.Instagram
         }
 
         /// <inheritdoc/>
+        [Retry]
         public Task<UserProfile> GetUserProfile(string userName, CancellationToken cancellationToken) =>
             InvokeRequest(
                 new RestRequest($"/api/v1/users/web_profile_info/?username={userName}", Method.Get),

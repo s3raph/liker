@@ -3,6 +3,10 @@ using Liker.Instagram;
 using Liker.Logic;
 using Liker.Persistence;
 using Ninject;
+using Ninject.Extensions.Interception;
+using Ninject.Extensions.Interception.Attributes;
+using Ninject.Extensions.Interception.Infrastructure.Language;
+using Ninject.Extensions.Interception.Request;
 using System.Diagnostics;
 
 namespace Liker
@@ -130,9 +134,121 @@ namespace Liker
             kernel.Bind<IDatabase>().To<Database>();
 
             // Initialize Instagram service
-            kernel.Bind<IInstagramService>().To<InstagramService>();
+            kernel.Bind<IInstagramService>().To<InstagramService>()
+                .Intercept().With<RetryInterceptor>();
 
             return kernel;
         }
+    }
+
+    public class RetryInterceptor : IInterceptor
+    {
+        private const int TIMES_TO_RETRY = 1;
+
+        private readonly TaskScheduler Scheduler;
+
+        public RetryInterceptor()
+        {
+            Scheduler = TaskScheduler.Current;
+        }
+
+        /// <summary>
+        /// Constructor for injecting custom task scheduler for unit testing
+        /// </summary>
+        /// <param name="scheduler"></param>
+        /// <exception cref="ArgumentNullException"></exception>
+        internal RetryInterceptor(TaskScheduler scheduler)
+        {
+            Scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
+        }
+
+        public void Intercept(IInvocation invocation)
+        {
+            //AsyncInterceptor
+            //var exceptions = new List<Exception>();
+
+            //invocation.Clone();
+
+            //for (int i = 0; i <= TIMES_TO_RETRY; i++)
+            //{
+            //    try
+            //    {
+            //        invocation.Proceed();
+            //        return;
+            //    }
+            //    catch (InstagramRESTException ex) when (ex.StatusCode == 0)
+            //    {
+            //        exceptions.Add(ex);
+
+            //        if (i < TIMES_TO_RETRY)
+            //        {
+            //            Console.WriteLine($"Warning: Handled {nameof(InstagramRESTException)} (HTTP status {ex.StatusCode}) - {ex.Message}");
+            //            //await Utility.DelayByRandom(5000);
+            //        }
+            //        else
+            //        {
+            //            throw;
+            //        }
+            //    }
+            //}
+
+            //IInvocation invocationClone = invocation.Clone();
+            //invocation.ReturnValue = Task.Factory.StartNew(delegate
+            //{
+            //    //BeforeInvoke(invocation);
+            //}).ContinueWith(delegate
+            //{
+            //    invocationClone.Proceed();
+            //    return invocationClone.ReturnValue as Task;
+            //}).Unwrap()
+            //    .ContinueWith(delegate (Task t)
+            //    {
+            //        //AfterInvoke(invocation);
+            //        //AfterInvoke(invocation, t);
+            //    });
+
+            int i = 0;
+
+            Func<Task> CloneAndInvoke = () =>
+            {
+                i++;
+                IInvocation invocationClone = invocation.Clone();
+                invocationClone.Proceed();
+                return invocationClone.ReturnValue as Task;
+            };
+
+            Task returnVal = Task.Factory.StartNew(CloneAndInvoke, CancellationToken.None, TaskCreationOptions.None, Scheduler)
+                .ContinueWith(t =>
+                {
+                    if (t.IsFaulted && i <= TIMES_TO_RETRY && t?.Exception.Flatten().InnerExceptions.First() is InstagramRESTException ex && ex.StatusCode == 0)
+                    {
+                        Console.WriteLine($"Warning: Handled {nameof(InstagramRESTException)} (HTTP status {ex.StatusCode}) - {ex.Message}");
+
+                        return Utility.DelayByRandom(5000)
+                            .ContinueWith(t => CloneAndInvoke(), Scheduler);
+                    }
+                    else
+                    {
+                        return t;
+                    }
+                }, Scheduler);
+
+            invocation.ReturnValue = returnVal;
+        }
+
+        //private static Func<Task> CloneAndInvoke(IInvocation invocation)
+        //{
+        //    return () =>
+        //    {
+        //        IInvocation invocationClone = invocation.Clone();
+        //        invocationClone.Proceed();
+        //        return invocationClone.ReturnValue as Task;
+        //    };
+        //}
+    }
+
+    public class RetryAttribute : InterceptAttribute
+    {
+        public override IInterceptor CreateInterceptor(IProxyRequest request) => request.Context.Kernel.Get<RetryInterceptor>();
     }
 }

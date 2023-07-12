@@ -86,7 +86,7 @@ namespace Liker.Logic
                             }
                             else
                             {
-                                await DelayByRandom(Options.DelaySeed);
+                                await Utility.DelayByRandom(Options.DelaySeed);
 
                                 var userProfile = await RetryStatusCodeZero(() => InstaService.GetUserProfile(follower.Username, token));
 
@@ -114,7 +114,7 @@ namespace Liker.Logic
                                         {
                                             token.ThrowIfCancellationRequested();
 
-                                            await DelayByRandom(Options.DelaySeed);
+                                            await Utility.DelayByRandom(Options.DelaySeed);
                                             await RetryStatusCodeZero(() => InstaService.LikeAsync(post.Pk, token));
                                             follower.PostsLiked++;
                                             postsLiked++;
@@ -193,7 +193,7 @@ namespace Liker.Logic
                         if (currentPage.IsThereAnotherPage)
                         {
                             await Database.SetAccountNextMaxIdAsync(account, currentPage.NextPageOptions.MaxID);
-                            await DelayByRandom(Options.DelaySeed);
+                            await Utility.DelayByRandom(Options.DelaySeed);
                         }
                     }
                     while (currentPage.IsThereAnotherPage);
@@ -248,7 +248,7 @@ namespace Liker.Logic
                     if (i < timesToRetry)
                     {
                         Console.WriteLine($"Warning: Handled {nameof(InstagramRESTException)} (HTTP status {ex.StatusCode}) - {ex.Message}");
-                        await DelayByRandom(5000);
+                        await Utility.DelayByRandom(5000);
                     }
                     else
                     {
@@ -292,7 +292,7 @@ namespace Liker.Logic
                     token.ThrowIfCancellationRequested();
 
                     option = postsPage.NextPageOptions;
-                    await DelayByRandom(Options.DelaySeed);
+                    await Utility.DelayByRandom(Options.DelaySeed);
                 }
                 else
                 {
@@ -310,18 +310,5 @@ namespace Liker.Logic
         /// <param name="text"></param>
         /// <returns></returns>
         public bool DoesTextContainAnyHashTags(string text) => string.IsNullOrEmpty(text) ? false : HashTagRegex.IsMatch(text);
-
-        private static Random Randy = new Random();
-
-        /// <summary>
-        /// Delays by a random interval that will be 50% higher or lower than the milliseconds provided before calling the
-        /// provided function
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="millisecondsSeed"></param>
-        /// <param name="toDebounce"></param>
-        /// <param name="token"></param>
-        /// <returns></returns>
-        private static Task DelayByRandom(int millisecondsSeed, CancellationToken token = default) => Task.Delay((millisecondsSeed / 2) + Randy.Next(millisecondsSeed), token);
     }
 }
